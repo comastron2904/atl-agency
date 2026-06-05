@@ -80,7 +80,7 @@ function fileIconTi(name: string) {
   return 'ti-file'
 }
 
-const STORAGE_KEY = 'atl_gemini_key'
+const STORAGE_KEY = 'atl_groq_key'
 
 export default function Home() {
   const [modalOpen, setModalOpen]         = useState(false)
@@ -100,7 +100,6 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropRef      = useRef<HTMLDivElement>(null)
 
-  // API 키 localStorage에서 불러오기
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) || ''
     setApiKey(saved)
@@ -113,7 +112,6 @@ export default function Home() {
     setModalOpen(false)
   }
 
-  // Storage에서 파일 목록 불러오기
   const loadStoredFiles = useCallback(async () => {
     setKbLoading(true)
     try {
@@ -127,13 +125,9 @@ export default function Home() {
             if (!cr.ok) throw new Error('읽기 실패')
             const data = await cr.json()
             return {
-              name: item.name,
-              size: item.metadata?.size ?? 0,
-              status: 'ready' as const,
-              content: data.content ?? null,
-              base64: data.base64 ?? null,
-              mimeType: data.mimeType ?? null,
-              isPdf: data.isPdf ?? false,
+              name: item.name, size: item.metadata?.size ?? 0, status: 'ready' as const,
+              content: data.content ?? null, base64: data.base64 ?? null,
+              mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false,
             }
           } catch {
             return { name: item.name, size: item.metadata?.size ?? 0, status: 'error' as const, content: null, base64: null, mimeType: null, isPdf: false }
@@ -187,25 +181,23 @@ export default function Home() {
     await Promise.all(names.map(name => fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })))
   }
 
-  // 브라우저에서 직접 Gemini 호출
-  const buildParts = () => {
-    const parts: object[] = []
+  const buildPrompt = () => {
     const readyFiles = knowledgeBase.filter(f => f.status === 'ready')
-    readyFiles.forEach(f => {
-      if (f.isPdf && f.base64) {
-        parts.push({ inlineData: { mimeType: f.mimeType, data: f.base64 } })
-        parts.push({ text: `위 파일은 "${f.name}"입니다. ATL 추천 시 이 문서의 내용을 적극 반영하세요.` })
-      } else if (f.content) {
-        parts.push({ text: `=== 참고 문서: ${f.name} ===\n${f.content.slice(0, 10000)}\n=== 끝 ===` })
-      }
-    })
     const typeStr = selectedTypes.size > 0 ? [...selectedTypes].join(', ') : '명시되지 않음'
     const atlStr  = selectedATLs.size  > 0 ? [...selectedATLs].join(', ')  : '전체 범주'
     const fileStr = readyFiles.map(f => f.name).join(', ') || '없음'
     const gemsBlock = gemsText.trim() ? `\n[답변 방향성 지침 — 반드시 준수]\n${gemsText.trim()}\n` : ''
-    parts.push({ text: `
-당신은 IB(국제바칼로레아) 교육 전문가입니다. 위에 제공된 참고 문서를 바탕으로 수업에 맞는 ATL 스킬을 추천해 주세요.
+
+    let fileDocs = ''
+    readyFiles.forEach(f => {
+      if (f.content) {
+        fileDocs += `\n=== 참고 문서: ${f.name} ===\n${f.content.slice(0, 8000)}\n=== 끝 ===\n`
+      }
+    })
+
+    return `당신은 IB(국제바칼로레아) 교육 전문가입니다. 수업에 맞는 ATL 스킬을 추천해 주세요.
 ${gemsBlock}
+${fileDocs}
 [수업 정보]
 - 수업 설명: ${lesson || '(없음)'}
 - 수업 유형: ${typeStr}
@@ -220,7 +212,7 @@ ${gemsBlock}
 4. 조사기능: 정보 수집·평가, 미디어 리터러시, 데이터 정리, 출처 분석
 5. 사고기능: 비판적 사고, 창의적 사고, 전이, 문제 해결·의사결정
 
-반드시 아래 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만:
+반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록 없이 순수 JSON만:
 {
   "summary": "수업 분석 요약 (2–3문장)",
   "usedFiles": ["참고한 파일명"],
@@ -230,8 +222,7 @@ ${gemsBlock}
       "activities": ["활동1", "활동2", "활동3"] }
   ]
 }
-recommendations 최소 4개, 최대 7개.` })
-    return parts
+recommendations 최소 4개, 최대 7개.`
   }
 
   const handleSubmit = async () => {
@@ -244,20 +235,28 @@ recommendations 최소 4개, 최대 7개.` })
     }
     setLoading(true); setResult(null); setError('')
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: buildParts() }],
-            generationConfig: { temperature: 0.35, maxOutputTokens: 2500 },
-          }),
-        }
-      )
+      // Groq API 직접 호출
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: '당신은 IB 교육 전문가입니다. 반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.' },
+            { role: 'user', content: buildPrompt() },
+          ],
+          temperature: 0.35,
+          max_tokens: 2500,
+        }),
+      })
+
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`)
-      const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+
+      const raw: string = data?.choices?.[0]?.message?.content || ''
       const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
       // Supabase에 기록 저장
@@ -303,15 +302,15 @@ recommendations 최소 4개, 최대 7개.` })
           <div className="modal-box">
             <div className="modal-title"><i className="ti ti-settings"></i> 설정</div>
 
-            <div className="modal-label">Gemini API 키</div>
+            <div className="modal-label">Groq API 키</div>
             <input
-              type="password" className="modal-input" placeholder="AIza..."
+              type="password" className="modal-input" placeholder="gsk_..."
               value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)}
               autoComplete="off"
             />
             <div className="modal-hint">
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
-                style={{ color: 'var(--green-dark)' }}>Google AI Studio</a>에서 발급받은 키를 입력하세요.<br />
+              <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer"
+                style={{ color: 'var(--green-dark)' }}>console.groq.com</a>에서 무료로 발급받으세요.<br />
               키는 브라우저에만 저장되며 외부로 전송되지 않습니다.
             </div>
             <div className="modal-status">
@@ -380,7 +379,7 @@ recommendations 최소 4개, 최대 7개.` })
             ) : knowledgeBase.length === 0 ? (
               <div className="kb-empty">
                 <i className="ti ti-files"></i>
-                <p>파일을 업로드하면<br />Gemini가 내용을 읽고<br />ATL 추천에 활용합니다</p>
+                <p>파일을 업로드하면<br />AI가 내용을 읽고<br />ATL 추천에 활용합니다</p>
               </div>
             ) : knowledgeBase.map((f, i) => (
               <div key={i} className={`file-item${f.status === 'error' ? ' error' : ''}`}>
@@ -448,7 +447,7 @@ recommendations 최소 4개, 최대 7개.` })
             <div className="empty-state">
               <i className="ti ti-bulb"></i>
               <h3>ATL 추천을 시작하세요</h3>
-              <p>⚙️ 설정에서 API 키와 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
+              <p>⚙️ 설정에서 Groq API 키와 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
             </div>
           )}
           {loading && (
@@ -473,7 +472,7 @@ recommendations 최소 4개, 최대 7개.` })
               {result.summary && (
                 <div className="ai-summary">
                   <div className="summary-label">
-                    <i className="ti ti-sparkles" style={{ fontSize: 11 }}></i> Gemini 분석
+                    <i className="ti ti-sparkles" style={{ fontSize: 11 }}></i> AI 분석
                     {gemsText.trim() && <span style={{ marginLeft: 'auto', fontSize: 9.5, background: 'var(--green)', color: '#fff', padding: '1px 7px', borderRadius: 4, fontWeight: 600, letterSpacing: '0.05em' }}>GEMS 적용</span>}
                   </div>
                   <div className="summary-text">{result.summary}</div>
