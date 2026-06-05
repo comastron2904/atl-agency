@@ -8,39 +8,11 @@ function getSupabaseAdmin() {
   )
 }
 
+// Gemini 호출은 브라우저에서 직접 — 여기서는 결과를 Supabase에만 저장
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { lesson, grade, selectedTypes, selectedATLs, gemsInstruction, parts } = body
-
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' }, { status: 500 })
-    }
-
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.35, maxOutputTokens: 2500 },
-        }),
-      }
-    )
-
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}))
-      return NextResponse.json(
-        { error: (err as any)?.error?.message || `Gemini HTTP ${geminiRes.status}` },
-        { status: geminiRes.status }
-      )
-    }
-
-    const geminiData = await geminiRes.json()
-    const raw: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const { lesson, grade, selectedTypes, selectedATLs, gemsInstruction, parsed } = body
 
     const supabase = getSupabaseAdmin()
     const { error: dbError } = await supabase.from('atl_recommendations').insert({
@@ -49,14 +21,14 @@ export async function POST(req: NextRequest) {
       grade: grade || '',
       atl_categories: selectedATLs || [],
       gems_instruction: gemsInstruction || null,
-      summary: parsed.summary || '',
-      recommendations: parsed.recommendations || [],
-      used_files: parsed.usedFiles || [],
+      summary: parsed?.summary || '',
+      recommendations: parsed?.recommendations || [],
+      used_files: parsed?.usedFiles || [],
     })
     if (dbError) console.error('Supabase insert error:', dbError.message)
 
-    return NextResponse.json(parsed)
+    return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || '알 수 없는 오류' }, { status: 500 })
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
