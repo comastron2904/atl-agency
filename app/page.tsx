@@ -1,12 +1,12 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 
 /* ── 타입 ── */
 type KBFile = {
   name: string
   size: number
-  status: 'proc' | 'ready' | 'error'
+  status: 'uploading' | 'ready' | 'error'
   content: string | null
   base64: string | null
   mimeType: string | null
@@ -87,71 +87,138 @@ function fileIconTi(name: string) {
 
 /* ── 컴포넌트 ── */
 export default function Home() {
-  /* state */
-  const [modalOpen, setModalOpen]       = useState(false)
-  const [gemsText, setGemsText]         = useState('')
-  const [gemsPreset, setGemsPreset]     = useState('')
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
-  const [selectedATLs, setSelectedATLs]   = useState<Set<string>>(new Set())
-  const [grade, setGrade]               = useState('')
-  const [lesson, setLesson]             = useState('')
-  const [knowledgeBase, setKB]          = useState<KBFile[]>([])
-  const [loading, setLoading]           = useState(false)
-  const [result, setResult]             = useState<ResultData | null>(null)
-  const [error, setError]               = useState('')
+  const [modalOpen, setModalOpen]           = useState(false)
+  const [gemsText, setGemsText]             = useState('')
+  const [gemsPreset, setGemsPreset]         = useState('')
+  const [selectedTypes, setSelectedTypes]   = useState<Set<string>>(new Set())
+  const [selectedATLs, setSelectedATLs]     = useState<Set<string>>(new Set())
+  const [grade, setGrade]                   = useState('')
+  const [lesson, setLesson]                 = useState('')
+  const [knowledgeBase, setKB]              = useState<KBFile[]>([])
+  const [loading, setLoading]               = useState(false)
+  const [result, setResult]                 = useState<ResultData | null>(null)
+  const [error, setError]                   = useState('')
+  const [kbLoading, setKbLoading]           = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropRef      = useRef<HTMLDivElement>(null)
 
-  /* 태그 토글 */
+  /* ── 마운트 시 Storage에서 파일 목록 불러오기 ── */
+  const loadStoredFiles = useCallback(async () => {
+    setKbLoading(true)
+    try {
+      const res = await fetch('/api/files')
+      if (!res.ok) throw new Error('목록 조회 실패')
+      const list: { name: string; metadata?: { size?: number } }[] = await res.json()
+
+      // 각 파일의 내용도 병렬로 불러오기
+      const files = await Promise.all(
+        list.map(async (item) => {
+          try {
+            const cr = await fetch(`/api/files/content?name=${encodeURIComponent(item.name)}`)
+            if (!cr.ok) throw new Error('읽기 실패')
+            const data = await cr.json()
+            return {
+              name: item.name,
+              size: item.metadata?.size ?? 0,
+              status: 'ready' as const,
+              content: data.content ?? null,
+              base64: data.base64 ?? null,
+              mimeType: data.mimeType ?? null,
+              isPdf: data.isPdf ?? false,
+            }
+          } catch {
+            return {
+              name: item.name,
+              size: item.metadata?.size ?? 0,
+              status: 'error' as const,
+              content: null, base64: null, mimeType: null, isPdf: false,
+            }
+          }
+        })
+      )
+      setKB(files)
+    } catch {
+      // 네트워크 오류 등 — 빈 목록으로 시작
+      setKB([])
+    } finally {
+      setKbLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadStoredFiles() }, [loadStoredFiles])
+
+  /* ── 태그 토글 ── */
   const toggleType = (val: string) =>
     setSelectedTypes(prev => { const n = new Set(prev); n.has(val) ? n.delete(val) : n.add(val); return n })
   const toggleATL = (val: string) =>
     setSelectedATLs(prev => { const n = new Set(prev); n.has(val) ? n.delete(val) : n.add(val); return n })
 
-  /* 파일 처리 */
-  const readAsBase64 = (file: File): Promise<string> =>
-    new Promise((res, rej) => {
-      const r = new FileReader()
-      r.onload = e => res((e.target!.result as string).split(',')[1])
-      r.onerror = () => rej(new Error('읽기 실패'))
-      r.readAsDataURL(file)
-    })
-  const readAsText = (file: File): Promise<string> =>
-    new Promise((res, rej) => {
-      const r = new FileReader()
-      r.onload = e => res(e.target!.result as string)
-      r.onerror = () => rej(new Error('읽기 실패'))
-      r.readAsText(file, 'UTF-8')
+  /* ── 파일 업로드 → Supabase Storage ── */
+  const uploadFile = async (file: File) => {
+    const entry: KBFile = {
+      name: file.name, size: file.size, status: 'uploading',
+      content: null, base64: null, mimeType: null, isPdf: false,
+    }
+    setKB(prev => {
+      // 같은 이름이면 교체
+      const filtered = prev.filter(f => f.name !== file.name)
+      return [...filtered, entry]
     })
 
-  const processFile = async (file: File) => {
-    const ext = file.name.split('.').pop()?.toLowerCase()
-    const entry: KBFile = { name: file.name, size: file.size, status: 'proc', content: null, base64: null, mimeType: null, isPdf: false }
-    setKB(prev => [...prev, entry])
     try {
-      if (ext === 'pdf') {
-        entry.base64 = await readAsBase64(file)
-        entry.mimeType = 'application/pdf'
-        entry.isPdf = true
-      } else {
-        entry.content = await readAsText(file)
-      }
-      entry.status = 'ready'
-    } catch { entry.status = 'error' }
-    setKB(prev => prev.map(f => f === entry ? { ...entry } : f))
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch('/api/files', { method: 'POST', body: form })
+      if (!res.ok) throw new Error((await res.json()).error || '업로드 실패')
+
+      // 업로드 후 내용 읽기
+      const cr = await fetch(`/api/files/content?name=${encodeURIComponent(file.name)}`)
+      if (!cr.ok) throw new Error('읽기 실패')
+      const data = await cr.json()
+
+      setKB(prev => prev.map(f =>
+        f.name === file.name
+          ? { ...f, status: 'ready', content: data.content ?? null, base64: data.base64 ?? null, mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false }
+          : f
+      ))
+    } catch (e: any) {
+      setKB(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error' } : f))
+    }
   }
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    ;[...(e.target.files || [])].forEach(processFile)
+    ;[...(e.target.files || [])].forEach(uploadFile)
     e.target.value = ''
   }
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
     dropRef.current?.classList.remove('drag-over')
-    ;[...e.dataTransfer.files].forEach(processFile)
+    ;[...e.dataTransfer.files].forEach(uploadFile)
   }
 
-  /* 프롬프트 빌드 */
+  /* ── 파일 삭제 ── */
+  const deleteFile = async (name: string) => {
+    setKB(prev => prev.filter(f => f.name !== name))
+    await fetch('/api/files', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+  }
+
+  const deleteAll = async () => {
+    const names = knowledgeBase.map(f => f.name)
+    setKB([])
+    await Promise.all(names.map(name =>
+      fetch('/api/files', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+    ))
+  }
+
+  /* ── 프롬프트 빌드 ── */
   const buildParts = () => {
     const parts: object[] = []
     const readyFiles = knowledgeBase.filter(f => f.status === 'ready')
@@ -200,13 +267,13 @@ recommendations 최소 4개, 최대 7개.` })
     return parts
   }
 
-  /* 제출 */
+  /* ── 제출 ── */
   const handleSubmit = async () => {
     if (!lesson && selectedTypes.size === 0 && knowledgeBase.length === 0) {
       alert('수업 설명이나 수업 유형을 입력해 주세요.'); return
     }
-    if (knowledgeBase.some(f => f.status === 'proc')) {
-      alert('파일 처리 중입니다. 잠시 후 다시 시도해 주세요.'); return
+    if (knowledgeBase.some(f => f.status === 'uploading')) {
+      alert('파일 업로드 중입니다. 잠시 후 다시 시도해 주세요.'); return
     }
     setLoading(true); setResult(null); setError('')
     try {
@@ -253,8 +320,6 @@ recommendations 최소 4개, 최대 7개.` })
         <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}>
           <div className="modal-box">
             <div className="modal-title"><i className="ti ti-settings"></i> 설정</div>
-
-            {/* API 키 안내 */}
             <div className="modal-label">Gemini API 키</div>
             <div className="modal-hint" style={{ marginBottom: 8 }}>
               API 키는 서버 환경변수(<code>GEMINI_API_KEY</code>)로 관리됩니다.<br />
@@ -264,11 +329,7 @@ recommendations 최소 4개, 최대 7개.` })
               <span className="modal-dot ok"></span>
               <span className="modal-dot-label ok">서버에서 API 키를 사용합니다</span>
             </div>
-
-            {/* 구분선 */}
             <div style={{ borderTop: '0.5px solid var(--border)', margin: '1rem 0' }}></div>
-
-            {/* GEMS */}
             <div className="modal-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span>답변 방향성</span>
               <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', background: 'var(--green)', color: '#fff', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>GEMS</span>
@@ -280,27 +341,19 @@ recommendations 최소 4개, 최대 7개.` })
             </div>
             <div className="gems-presets">
               {GEMS_PRESETS.map(p => (
-                <button
-                  key={p.val}
-                  className={`gems-preset${gemsPreset === p.val ? ' active' : ''}`}
+                <button key={p.val} className={`gems-preset${gemsPreset === p.val ? ' active' : ''}`}
                   onClick={() => {
                     if (gemsPreset === p.val) { setGemsPreset(''); setGemsText('') }
                     else { setGemsPreset(p.val); setGemsText(p.val) }
-                  }}
-                >{p.label}</button>
+                  }}>{p.label}</button>
               ))}
             </div>
-            <textarea
-              className="gems-textarea"
-              value={gemsText}
+            <textarea className="gems-textarea" value={gemsText}
               placeholder="예: 초등 저학년 교사 대상이므로 전문 용어 대신 쉬운 말로, 실내 활동 위주로 제안해주세요."
-              maxLength={400}
-              onChange={e => { setGemsText(e.target.value); setGemsPreset('') }}
-              style={{ marginTop: 8 }}
-            />
+              maxLength={400} onChange={e => { setGemsText(e.target.value); setGemsPreset('') }}
+              style={{ marginTop: 8 }} />
             <div className="gems-char">{gemsText.length} / 400</div>
             <div className="modal-hint" style={{ marginTop: 6 }}>AI가 추천 결과를 생성할 때 이 지침을 우선적으로 따릅니다.</div>
-
             <div className="modal-close-row">
               <button className="btn-pill" style={{ height: 34, fontSize: '12.5px' }} onClick={() => setModalOpen(false)}>
                 <i className="ti ti-check"></i> 저장
@@ -317,14 +370,11 @@ recommendations 최소 4개, 최대 7개.` })
         <div className="kb-panel">
           <div className="panel-head">
             <div className="panel-label">지식 베이스</div>
-            <div
-              ref={dropRef}
-              className="drop-zone"
+            <div ref={dropRef} className="drop-zone"
               onClick={() => fileInputRef.current?.click()}
               onDragOver={e => { e.preventDefault(); dropRef.current?.classList.add('drag-over') }}
               onDragLeave={() => dropRef.current?.classList.remove('drag-over')}
-              onDrop={onDrop}
-            >
+              onDrop={onDrop}>
               <input ref={fileInputRef} type="file" multiple
                 accept=".pdf,.txt,.md,.docx,.csv,.json,.xlsx"
                 onChange={onFileSelect} style={{ display: 'none' }} />
@@ -334,7 +384,14 @@ recommendations 최소 4개, 최대 7개.` })
             </div>
           </div>
           <div className="kb-list">
-            {knowledgeBase.length === 0 ? (
+            {kbLoading ? (
+              <div className="kb-empty">
+                <div className="loading-dots" style={{ justifyContent: 'center', marginTop: 24 }}>
+                  <span></span><span></span><span></span>
+                </div>
+                <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>파일 불러오는 중...</p>
+              </div>
+            ) : knowledgeBase.length === 0 ? (
               <div className="kb-empty">
                 <i className="ti ti-files"></i>
                 <p>파일을 업로드하면<br />Gemini가 내용을 읽고<br />ATL 추천에 활용합니다</p>
@@ -345,11 +402,13 @@ recommendations 최소 4개, 최대 7개.` })
                 <div className="file-info">
                   <div className="file-name" title={f.name}>{f.name}</div>
                   <div className="file-meta">{fmtSize(f.size)}</div>
-                  <div className={`file-status ${f.status}`}>
-                    {f.status === 'ready' ? '✓ 준비 완료' : f.status === 'error' ? '⚠ 읽기 실패' : '처리 중...'}
+                  <div className={`file-status ${f.status === 'uploading' ? 'proc' : f.status}`}>
+                    {f.status === 'ready' ? '✓ 준비 완료'
+                      : f.status === 'error' ? '⚠ 오류'
+                      : '⬆ 업로드 중...'}
                   </div>
                 </div>
-                <button className="file-del" onClick={() => setKB(prev => prev.filter((_, j) => j !== i))}>
+                <button className="file-del" onClick={() => deleteFile(f.name)}>
                   <i className="ti ti-x"></i>
                 </button>
               </div>
@@ -357,7 +416,7 @@ recommendations 최소 4개, 최대 7개.` })
           </div>
           <div className="kb-foot">
             <span className="kb-count">파일 {knowledgeBase.length}개 · {fmtSize(kbTotal)}</span>
-            <button className="btn-pill-danger" onClick={() => setKB([])}>
+            <button className="btn-pill-danger" onClick={deleteAll}>
               <i className="ti ti-trash"></i> 전체 삭제
             </button>
           </div>
@@ -367,28 +426,19 @@ recommendations 최소 4개, 최대 7개.` })
         <div className="input-panel">
           <div className="input-group">
             <div className="sec-label">수업 설명</div>
-            <textarea
-              id="lesson-input"
-              style={{ minHeight: 180 }}
+            <textarea id="lesson-input" style={{ minHeight: 180 }}
               placeholder="예: 학생들이 모둠을 이뤄 지역 환경 문제를 조사하고, 발표 자료를 만들어 학교 커뮤니티에 제안하는 프로젝트 수업입니다."
-              value={lesson}
-              onChange={e => setLesson(e.target.value)}
-            />
+              value={lesson} onChange={e => setLesson(e.target.value)} />
           </div>
-
           <div className="input-group">
             <div className="sec-label">수업 유형</div>
             <div className="tag-group">
               {TYPE_TAGS.map(t => (
-                <span
-                  key={t.val}
-                  className={`tag${selectedTypes.has(t.val) ? ' active' : ''}`}
-                  onClick={() => toggleType(t.val)}
-                >{t.label}</span>
+                <span key={t.val} className={`tag${selectedTypes.has(t.val) ? ' active' : ''}`}
+                  onClick={() => toggleType(t.val)}>{t.label}</span>
               ))}
             </div>
           </div>
-
           <div className="input-group">
             <div className="sec-label">학년군</div>
             <select value={grade} onChange={e => setGrade(e.target.value)}>
@@ -401,20 +451,15 @@ recommendations 최소 4개, 최대 7개.` })
               <option value="DP 2 (고3)">DP 2 (고3)</option>
             </select>
           </div>
-
           <div className="input-group">
             <div className="sec-label">ATL 기능 범주 <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>(선택)</span></div>
             <div className="tag-group">
               {ATL_TAGS.map(t => (
-                <span
-                  key={t}
-                  className={`tag${selectedATLs.has(t) ? ' active' : ''}`}
-                  onClick={() => toggleATL(t)}
-                >{t}</span>
+                <span key={t} className={`tag${selectedATLs.has(t) ? ' active' : ''}`}
+                  onClick={() => toggleATL(t)}>{t}</span>
               ))}
             </div>
           </div>
-
           <button className="btn-submit" onClick={handleSubmit} disabled={loading}>
             <i className="ti ti-sparkles"></i>
             {loading ? 'ATL 분석 중...' : 'ATL 추천 받기'}
@@ -430,7 +475,6 @@ recommendations 최소 4개, 최대 7개.` })
               <p>⚙️ 설정에서 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
             </div>
           )}
-
           {loading && (
             <div className="loading-wrap">
               <div className="loading-dots"><span></span><span></span><span></span></div>
@@ -439,14 +483,12 @@ recommendations 최소 4개, 최대 7개.` })
               </div>
             </div>
           )}
-
           {error && (
             <div className="error-box">
               <strong>오류가 발생했습니다</strong>
-              {error}<br /><br />서버 환경변수(GEMINI_API_KEY)가 올바르게 설정되었는지 확인해 주세요.
+              {error}
             </div>
           )}
-
           {result && (
             <>
               {result.usedFiles?.length > 0 && (
@@ -497,11 +539,7 @@ recommendations 최소 4개, 최대 7개.` })
                       </span>
                     </div>
                     <p className="atl-desc">{r.description}</p>
-                    {r.reason && (
-                      <div className="atl-reason">
-                        <i className="ti ti-arrow-right"></i>{r.reason}
-                      </div>
-                    )}
+                    {r.reason && <div className="atl-reason"><i className="ti ti-arrow-right"></i>{r.reason}</div>}
                     <div className="chips">
                       {r.activities?.map((a, ai) => <span key={ai} className="chip">{a}</span>)}
                     </div>
