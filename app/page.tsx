@@ -40,12 +40,55 @@ const TYPE_TAGS = [
 const ATL_TAGS = ['의사소통기능', '대인관계기능', '자기관리기능', '조사기능', '사고기능']
 
 const GEMS_PRESETS = [
-  { label: '초등 교사용',  val: '초등교사용: 쉽고 직관적인 언어로, 활동 위주로 설명해줘' },
-  { label: '중등 교사용',  val: '중등교사용: ATL 용어를 정확히 사용하고, IB MYP 맥락에 맞게 설명해줘' },
-  { label: '간결하게',     val: '간결하게: 각 스킬을 1-2문장으로 요약하고, 활동 예시는 핵심 1개만 제시해줘' },
-  { label: '상세하게',     val: '상세하게: 각 스킬별로 배경 이론, 실제 적용 방법, 평가 연계까지 풍부하게 설명해줘' },
-  { label: '실용 중심',    val: '실용 중심: 이론 설명 최소화, 수업에서 바로 쓸 수 있는 구체적 활동과 도구 위주로 제안해줘' },
-  { label: '평가 연계',    val: '평가 연계: 각 ATL 스킬이 IB 평가 기준(Criteria)과 어떻게 연결되는지 명시해줘' },
+  {
+    label: '초등(PYP) 교사용',
+    val: `[대상] PYP 초등 교사 (IB 전문 지식 없을 수 있음)
+[언어] 전문 약어(ATL, MYP, DP 등) 사용 금지. "탐구기능" 대신 "궁금한 걸 스스로 찾아보는 능력"처럼 쉬운 말로 바꿔 쓸 것.
+[description] 각 스킬이 교실에서 어떤 모습으로 나타나는지 구체적 장면 묘사 (예: "학생이 모둠 활동 중 친구 의견을 끝까지 듣고 고개를 끄덕이는 모습").
+[activities] 특별한 준비물·공간 없이 바로 할 수 있는 15분 이내 활동 3가지.
+[reason] "왜 이 수업에 맞나요?"를 학부모에게 설명하듯 1문장으로.
+[summary] 수업 전체를 이야기처럼 2문장으로 서술.`,
+  },
+  {
+    label: 'MYP 교사용',
+    val: `[대상] IB MYP 교사 (ATL 프레임워크 숙지)
+[언어] IB 공식 ATL 용어 그대로 사용. 스킬 클러스터 명칭 병기 가능.
+[description] MYP 교과 맥락과 연결하여 해당 스킬이 MYP Unit Planner의 어느 항목(ATL skills, Learning experiences 등)에 해당하는지 명시.
+[activities] 수업 설계에 바로 삽입 가능한 학습 경험 기술. 형식: 동사로 시작하는 학습 목표문 스타일 ("학생들은 ~을 통해 ~할 수 있다").
+[reason] MYP Key Concept 또는 Related Concept과 연결하여 1문장.
+[summary] Unit Planner 'Context' 섹션에 붙여넣을 수 있는 수준의 요약 2문장.`,
+  },
+  {
+    label: '한 줄 요약형',
+    val: `[분량 제약] description은 반드시 15단어 이내 1문장. reason은 10단어 이내. activities는 단어 또는 짧은 구(句) 형태 3개.
+[summary] 핵심 키워드 3개를 콤마로 나열 후, 1문장 결론.
+[형식] 군더더기 없이 핵심만. 접속사, 수식어 최소화.
+[목적] 교사가 5초 안에 스캔하여 전체 추천을 파악할 수 있어야 함.`,
+  },
+  {
+    label: '심화 분석형',
+    val: `[분량] description 4~5문장. reason 2~3문장. activities 각 1~2문장 설명 포함.
+[description] ① 스킬 정의 → ② 이 수업에서의 발현 양상 → ③ 학생이 성장하는 구체적 방식 순서로 서술.
+[activities] 각 활동에 예상 소요시간·준비물·수업 단계(도입/전개/정리) 명시.
+[reason] 수업 설명의 어떤 요소가 이 스킬 선택의 근거인지 인용하여 설명.
+[summary] 이 수업의 ATL 관점 강점과 개선 여지를 각 1문장씩 포함한 2문장 분석.`,
+  },
+  {
+    label: '즉시 실행형',
+    val: `[초점] 이론·배경 설명 완전 생략. 모든 내용은 "내일 수업에서 바로 쓸 수 있는가?"를 기준으로 작성.
+[description] 교사 행동 지침으로 작성 (예: "수업 시작 3분, 전날 배운 내용을 1분 이내로 요약하게 하세요").
+[activities] 각 활동을 교사 시나리오 형식으로: "1) 교사가 ~한다 → 2) 학생이 ~한다 → 3) 결과물은 ~이다".
+[reason] 수업 목표와의 연결을 "~하기 때문에 효과적입니다" 형식으로.
+[summary] 오늘 수업에서 ATL을 적용하는 3단계 실행 계획으로 작성.`,
+  },
+  {
+    label: '평가 기준 연계',
+    val: `[핵심 요구사항] 모든 스킬을 IB 평가 기준(Criteria A~D 또는 관련 교과 기준)과 명시적으로 연결할 것.
+[description] 이 스킬이 어떤 평가 기준의 어느 수행 수준(strand)에서 드러나는지 구체적으로 서술.
+[activities] 각 활동 옆에 "(Criterion B - 탐구 계획)" 형식으로 연계 기준 태그 부착.
+[reason] "이 스킬을 연습하면 Criterion [X]의 [strand] 수행 수준이 향상되는 이유" 형식으로 작성.
+[summary] 이 수업의 주요 평가 기준과 ATL 연계 지점을 표 형식 대신 문장으로 요약 (예: "이 수업은 주로 Criterion C와 D에서 평가되며, 의사소통기능과 사고기능이 핵심 연결고리입니다").`,
+  },
 ]
 
 const CAT: Record<string, { iconBg: string; iconFill: string; icon: string }> = {
@@ -186,7 +229,6 @@ export default function Home() {
     const typeStr = selectedTypes.size > 0 ? [...selectedTypes].join(', ') : '명시되지 않음'
     const atlStr  = selectedATLs.size  > 0 ? [...selectedATLs].join(', ')  : '전체 범주'
     const fileStr = readyFiles.map(f => f.name).join(', ') || '없음'
-    const gemsBlock = gemsText.trim() ? `\n[답변 방향성 지침 — 반드시 준수]\n${gemsText.trim()}\n` : ''
 
     let fileDocs = ''
     readyFiles.forEach(f => {
@@ -195,8 +237,27 @@ export default function Home() {
       }
     })
 
-    return `당신은 IB(국제바칼로레아) 교육 전문가입니다. 수업에 맞는 ATL 스킬을 추천해 주세요.
-${gemsBlock}
+    // GEMS 지침: 프롬프트 최상단에 배치하고 각 JSON 필드와 1:1로 연결
+    const gemsBlock = gemsText.trim()
+      ? `
+########################################
+## GEMS 답변 지침 (최우선 적용 — 이하 모든 출력에 강제 적용)
+########################################
+아래 지침은 JSON의 각 필드 작성 방식을 직접 제어합니다.
+지침에 명시된 [분량], [언어], [형식], [description], [activities], [reason], [summary] 규칙을
+recommendations 배열의 모든 항목과 summary 필드에 빠짐없이 적용하세요.
+지침을 따르지 않은 항목은 잘못된 응답으로 간주합니다.
+
+${gemsText.trim()}
+
+########################################
+## GEMS 지침 끝 — 아래 수업 정보를 바탕으로 위 지침대로 JSON을 생성하세요
+########################################
+`
+      : ''
+
+    return `${gemsBlock}
+당신은 IB(국제바칼로레아) 교육 전문가입니다. 아래 수업에 맞는 ATL 스킬을 추천하세요.
 ${fileDocs}
 [수업 정보]
 - 수업 설명: ${lesson || '(없음)'}
@@ -214,15 +275,20 @@ ${fileDocs}
 
 반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록 없이 순수 JSON만:
 {
-  "summary": "수업 분석 요약 (2–3문장)",
+  "summary": "수업 분석 요약${gemsText.trim() ? ' (GEMS [summary] 규칙 적용)' : ' (2–3문장)'}",
   "usedFiles": ["참고한 파일명"],
   "recommendations": [
-    { "category": "ATL 기능 범주명", "skill": "ATL 스킬명", "relevance": "high 또는 mid",
-      "description": "스킬 설명 1–2문장", "reason": "이유 1문장",
-      "activities": ["활동1", "활동2", "활동3"] }
+    {
+      "category": "ATL 기능 범주명",
+      "skill": "ATL 스킬명",
+      "relevance": "high 또는 mid",
+      "description": "스킬 설명${gemsText.trim() ? ' (GEMS [description] 규칙 적용)' : ' 1–2문장'}",
+      "reason": "이유${gemsText.trim() ? ' (GEMS [reason] 규칙 적용)' : ' 1문장'}",
+      "activities": ["활동1", "활동2", "활동3 (GEMS [activities] 규칙 적용)"]
+    }
   ]
 }
-recommendations 최소 4개, 최대 7개.`
+recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\n위 GEMS 지침의 분량·형식 규칙이 최소/최대 개수보다 우선합니다.' : ''}`
   }
 
   const handleSubmit = async () => {
@@ -245,7 +311,16 @@ recommendations 최소 4개, 최대 7개.`
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           messages: [
-            { role: 'system', content: '당신은 IB 교육 전문가입니다. 반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.' },
+            {
+              role: 'system',
+              content: [
+                '당신은 IB 교육 전문가입니다.',
+                '반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.',
+                gemsText.trim()
+                  ? '사용자 메시지 최상단의 [GEMS 답변 지침]은 최우선 지시사항입니다. JSON의 모든 텍스트 필드(summary, description, reason, activities)를 해당 지침에 명시된 언어 수준·분량·형식에 맞게 작성하세요. 지침과 충돌할 경우 기본 형식보다 GEMS 지침을 따르세요.'
+                  : '',
+              ].filter(Boolean).join(' '),
+            },
             { role: 'user', content: buildPrompt() },
           ],
           temperature: 0.35,
@@ -340,11 +415,11 @@ recommendations 최소 4개, 최대 7개.`
               ))}
             </div>
             <textarea className="gems-textarea" value={gemsText}
-              placeholder="예: 초등 저학년 교사 대상이므로 전문 용어 대신 쉬운 말로, 실내 활동 위주로 제안해주세요."
+              placeholder="예시 1 (언어 수준): 초등 1-2학년 대상 수업입니다. 전문 용어 없이 쉬운 말로, description은 교실 장면 묘사로 써주세요.&#10;예시 2 (분량): description 1문장, activities는 이름만 3개, reason 없이 작성해주세요.&#10;예시 3 (형식): 모든 activities를 '~을 통해 ~한다' 형식으로, reason은 MYP Criterion과 연결해주세요."
               maxLength={400} onChange={e => { setGemsText(e.target.value); setGemsPreset('') }}
               style={{ marginTop: 8 }} />
             <div className="gems-char">{gemsText.length} / 400</div>
-            <div className="modal-hint" style={{ marginTop: 6 }}>AI가 추천 결과를 생성할 때 이 지침을 우선적으로 따릅니다.</div>
+            <div className="modal-hint" style={{ marginTop: 6 }}>각 필드(description · activities · reason · summary)의 언어 수준, 분량, 형식을 직접 지정하세요. 구체적일수록 AI가 정확히 따릅니다.</div>
 
             <div className="modal-close-row">
               <button className="btn-pill" style={{ height: 34, fontSize: '12.5px' }} onClick={saveApiKey}>
