@@ -605,54 +605,19 @@ recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침
                   <div className="summary-text" style={{ whiteSpace: 'pre-wrap' }}>{result.gemsExtra}</div>
                 </div>
               )}
-              {/* 링크 패널: AI에 의존하지 않고 클라이언트에서 추출한 확정값으로 렌더링 */}
-              {(() => {
-                const allLinks = knowledgeBase
-                  .filter(f => f.status === 'ready' && f.extractedLinks.length > 0)
-                  .flatMap(f => f.extractedLinks.map(lk => ({ ...lk, fromFile: f.name })))
-                if (allLinks.length === 0) return null
-                return (
-                  <div className="ai-summary" style={{ marginBottom: '0.875rem' }}>
-                    <div className="summary-label" style={{ marginBottom: 8 }}>
-                      <i className="ti ti-link" style={{ fontSize: 11 }}></i> 문서에서 추출된 링크
-                      <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{allLinks.length}개</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {allLinks.map((lk, i) => (
-                        <a key={i} href={lk.url} target="_blank" rel="noreferrer"
-                          style={{
-                            display: 'flex', alignItems: 'flex-start', gap: 7,
-                            textDecoration: 'none', padding: '5px 8px',
-                            borderRadius: 'var(--radius-md)',
-                            border: '0.5px solid #AECBFA',
-                            background: '#EEF4FF',
-                            transition: 'background 0.12s',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#D8E9FF')}
-                          onMouseLeave={e => (e.currentTarget.style.background = '#EEF4FF')}
-                        >
-                          <i className="ti ti-external-link" style={{ fontSize: 12, color: '#1A56DB', flexShrink: 0, marginTop: 1 }}></i>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: '#1A56DB', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {lk.label !== lk.url ? lk.label : new URL(lk.url).hostname}
-                            </div>
-                            <div style={{ fontSize: 10.5, color: '#5580C7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
-                              {lk.url}
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 9.5, color: 'var(--text3)', flexShrink: 0, alignSelf: 'center' }}>{lk.fromFile}</span>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })()}
               <div className="results-header">
                 <span className="results-title">추천 ATL 스킬</span>
                 <span className="results-count">{result.recommendations?.length}개 추천</span>
               </div>
               {result.recommendations?.map((r, idx) => {
                 const s = CAT[r.category] || { iconBg: '#5F5E5A', iconFill: '#F1EFE8', icon: 'ti-star' }
+                // PDF에서 추출한 URL만 허용 — AI가 만들어낸 외부 링크 차단
+                const allowedUrls = new Set(
+                  knowledgeBase
+                    .filter(f => f.status === 'ready')
+                    .flatMap(f => f.extractedLinks.map(lk => lk.url))
+                )
+                const safeLinks = (r.links || []).filter(lk => allowedUrls.has(lk.url))
                 return (
                   <div key={idx} className="atl-card">
                     <div className="atl-card-top">
@@ -672,9 +637,9 @@ recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침
                     <p className="atl-desc">{r.description}</p>
                     {r.reason && <div className="atl-reason"><i className="ti ti-arrow-right"></i>{r.reason}</div>}
                     <div className="chips">{r.activities?.map((a, ai) => <span key={ai} className="chip">{a}</span>)}</div>
-                    {r.links && r.links.length > 0 && (
+                    {safeLinks.length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {r.links.map((lk, li) => (
+                        {safeLinks.map((lk, li) => (
                           <a key={li} href={lk.url} target="_blank" rel="noreferrer"
                             style={{
                               display: 'flex', alignItems: 'flex-start', gap: 6,
