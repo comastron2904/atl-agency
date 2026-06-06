@@ -295,7 +295,6 @@ ${gemsText.trim()}
     return `${gemsBlock}
 당신은 IB(국제바칼로레아) 교육 전문가입니다. 아래 수업에 맞는 ATL 스킬을 추천하세요.
 ${fileDocs}
-${linksBlock}
 [수업 정보]
 - 수업 설명: ${lesson || '(없음)'}
 - 수업 유형: ${typeStr}
@@ -309,6 +308,7 @@ ${linksBlock}
 3. 자기관리기능: 조직화, 시간 관리, 정서 조절, 메타인지, 자기동기
 4. 조사기능: 정보 수집·평가, 미디어 리터러시, 데이터 정리, 출처 분석
 5. 사고기능: 비판적 사고, 창의적 사고, 전이, 문제 해결·의사결정
+${linksBlock}
 
 반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록 없이 순수 JSON만:
 {
@@ -363,7 +363,7 @@ recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침
             { role: 'user', content: buildPrompt() },
           ],
           temperature: 0.35,
-          max_tokens: 2500,
+          max_tokens: 4000,
         }),
       })
 
@@ -672,6 +672,34 @@ recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침
                     <p className="atl-desc">{r.description}</p>
                     {r.reason && <div className="atl-reason"><i className="ti ti-arrow-right"></i>{r.reason}</div>}
                     <div className="chips">{r.activities?.map((a, ai) => <span key={ai} className="chip">{a}</span>)}</div>
+                    {r.links && r.links.length > 0 && (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {r.links.map((lk, li) => (
+                          <a key={li} href={lk.url} target="_blank" rel="noreferrer"
+                            style={{
+                              display: 'flex', alignItems: 'flex-start', gap: 6,
+                              textDecoration: 'none', padding: '5px 8px',
+                              borderRadius: 'var(--radius-md)',
+                              border: '0.5px solid #AECBFA',
+                              background: '#EEF4FF',
+                              transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#D8E9FF')}
+                            onMouseLeave={e => (e.currentTarget.style.background = '#EEF4FF')}
+                          >
+                            <i className="ti ti-external-link" style={{ fontSize: 12, color: '#1A56DB', flexShrink: 0, marginTop: 1 }}></i>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, color: '#1A56DB', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {lk.label || new URL(lk.url).hostname}
+                              </div>
+                              <div style={{ fontSize: 10.5, color: '#5580C7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+                                {lk.url}
+                              </div>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
