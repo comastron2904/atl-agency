@@ -36,7 +36,7 @@ type RecommendationItem = {
   description: string
   reason: string
   activities: string[]
-  links?: { label: string; url: string }[]
+  activityKeys?: string[]  // AI가 고른 활동 label — 클라이언트가 PDF 링크로 매핑
 }
 
 type ResultData = {
@@ -258,14 +258,12 @@ export default function Home() {
       }
     })
 
-    // 클라이언트에서 이미 추출한 링크 — AI가 직접 찾는 방식은 신뢰도가 낮으므로
-    // 코드 레벨에서 추출한 확정값을 프롬프트에 명시적으로 주입
-    const allLinks = readyFiles.flatMap(f =>
-      f.extractedLinks.map(lk => ({ ...lk, fromFile: f.name }))
-    )
-    const linksBlock = allLinks.length > 0
-      ? `\n[참고 문서에서 추출된 링크 — 반드시 관련 recommendation의 "links" 배열에 포함할 것]\n` +
-        allLinks.map(lk => `- "${lk.label}" → ${lk.url}  (출처: ${lk.fromFile})`).join('\n') + '\n'
+    // PDF에서 추출한 활동명 목록 — AI가 이 label 중에서만 activityKeys를 선택
+    // 링크 URL은 클라이언트가 label 매칭으로 직접 붙임 (AI에게 URL 생성 권한 없음)
+    const allLinks = readyFiles.flatMap(f => f.extractedLinks)
+    const activityList = allLinks.length > 0
+      ? `\n[참고 문서의 활동 목록 — activityKeys는 반드시 이 label 값 중에서만 선택]\n` +
+        allLinks.map((lk, i) => `${i + 1}. "${lk.label}"`).join('\n') + '\n'
       : ''
 
     const gemsBlock = gemsText.trim()
@@ -276,9 +274,6 @@ export default function Home() {
 아래 지침은 JSON의 각 필드 작성 방식을 직접 제어합니다.
 지침에 명시된 [분량], [언어], [형식], [description], [activities], [reason], [summary] 규칙을
 recommendations 배열의 모든 항목과 summary 필드에 빠짐없이 적용하세요.
-
-★ 링크: 아래 [참고 문서에서 추출된 링크] 목록의 링크를
-  반드시 가장 연관성 높은 recommendation의 "links" 배열에 배분하세요.
 
 ★ 지침이 ATL 형식 밖의 자유 요청을 포함하면 "gemsExtra" 필드에 마크다운으로 작성하세요.
 
@@ -308,8 +303,7 @@ ${fileDocs}
 3. 자기관리기능: 조직화, 시간 관리, 정서 조절, 메타인지, 자기동기
 4. 조사기능: 정보 수집·평가, 미디어 리터러시, 데이터 정리, 출처 분석
 5. 사고기능: 비판적 사고, 창의적 사고, 전이, 문제 해결·의사결정
-${linksBlock}
-
+${activityList}
 반드시 아래 JSON 형식으로만 응답하세요. 마크다운 코드블록 없이 순수 JSON만:
 {
   "summary": "수업 분석 요약${gemsText.trim() ? ' (GEMS [summary] 규칙 적용)' : ' (2–3문장)'}",
@@ -323,11 +317,11 @@ ${linksBlock}
       "description": "스킬 설명${gemsText.trim() ? ' (GEMS [description] 규칙 적용)' : ' 1–2문장'}",
       "reason": "이유${gemsText.trim() ? ' (GEMS [reason] 규칙 적용)' : ' 1문장'}",
       "activities": ["활동1", "활동2", "활동3"],
-      "links": [{ "label": "링크 설명", "url": "https://..." }]
+      "activityKeys": ["위 활동 목록의 label — 링크 연결용, 목록에 없는 값 절대 금지"]
     }
   ]
 }
-recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침의 분량·형식 규칙이 최소/최대 개수보다 우선합니다.' : ''}`
+recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위 [참고 문서의 활동 목록] label과 정확히 일치해야 합니다.' : '\nactivityKeys는 빈 배열 []로 두세요.'}${gemsText.trim() ? '\n위 GEMS 지침의 분량·형식 규칙이 최소/최대 개수보다 우선합니다.' : ''}`
   }
 
   const handleSubmit = async () => {
@@ -611,13 +605,16 @@ recommendations 최소 4개, 최대 7개.${gemsText.trim() ? '\\n위 GEMS 지침
               </div>
               {result.recommendations?.map((r, idx) => {
                 const s = CAT[r.category] || { iconBg: '#5F5E5A', iconFill: '#F1EFE8', icon: 'ti-star' }
-                // PDF에서 추출한 URL만 허용 — AI가 만들어낸 외부 링크 차단
-                const allowedUrls = new Set(
+                // AI가 고른 activityKeys label로 PDF 링크 직접 매핑
+                const labelToLink = new Map(
                   knowledgeBase
                     .filter(f => f.status === 'ready')
-                    .flatMap(f => f.extractedLinks.map(lk => lk.url))
+                    .flatMap(f => f.extractedLinks)
+                    .map(lk => [lk.label, lk.url])
                 )
-                const safeLinks = (r.links || []).filter(lk => allowedUrls.has(lk.url))
+                const safeLinks = (r.activityKeys || [])
+                  .map(key => ({ label: key, url: labelToLink.get(key) }))
+                  .filter((lk): lk is { label: string; url: string } => !!lk.url)
                 return (
                   <div key={idx} className="atl-card">
                     <div className="atl-card-top">
