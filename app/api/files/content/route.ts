@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import pdfParse from 'pdf-parse/lib/pdf-parse.js'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse')
 
 const BUCKET = 'knowledge-base'
 
