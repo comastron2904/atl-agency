@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import pdfParse from 'pdf-parse/lib/pdf-parse.js'
 
 const BUCKET = 'knowledge-base'
 
@@ -11,7 +12,7 @@ function adminClient() {
 }
 
 // GET /api/files/content?name=파일명
-// Storage에서 파일을 읽어 base64 또는 텍스트로 반환
+// Storage에서 파일을 읽어 base64 + 파싱된 텍스트(content) 모두 반환
 export async function GET(req: NextRequest) {
   try {
     const name = req.nextUrl.searchParams.get('name')
@@ -25,9 +26,17 @@ export async function GET(req: NextRequest) {
     const isPdf = ext === 'pdf'
 
     if (isPdf) {
-      const buffer = await data.arrayBuffer()
-      const base64 = Buffer.from(buffer).toString('base64')
-      return NextResponse.json({ name, isPdf: true, base64, mimeType: 'application/pdf' })
+      const buffer = Buffer.from(await data.arrayBuffer())
+      const base64 = buffer.toString('base64')
+      // PDF 텍스트 추출 — URL 파싱에 사용
+      let content: string | null = null
+      try {
+        const parsed = await pdfParse(buffer)
+        content = parsed.text
+      } catch {
+        content = null
+      }
+      return NextResponse.json({ name, isPdf: true, base64, mimeType: 'application/pdf', content })
     } else {
       const text = await data.text()
       return NextResponse.json({ name, isPdf: false, content: text })
