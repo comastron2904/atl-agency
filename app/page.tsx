@@ -11,6 +11,8 @@ type KBFile = {
   mimeType: string | null
   isPdf: boolean
   extractedLinks: { url: string; label: string }[]
+  sections: Record<string, string>   // ATL 범주별 섹션 텍스트
+  uris: string[]                     // PDF 어노테이션에서 추출한 완전한 URL
 }
 
 // 텍스트에서 URL을 클라이언트에서 직접 추출 — AI 판단에 맡기지 않음
@@ -192,9 +194,11 @@ export default function Home() {
               content, base64: data.base64 ?? null,
               mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false,
               extractedLinks: content ? extractUrls(content) : [],
+              sections: data.sections ?? {},
+              uris: data.uris ?? [],
             }
           } catch {
-            return { name: item.name, size: item.metadata?.size ?? 0, status: 'error' as const, content: null, base64: null, mimeType: null, isPdf: false, extractedLinks: [] }
+            return { name: item.name, size: item.metadata?.size ?? 0, status: 'error' as const, content: null, base64: null, mimeType: null, isPdf: false, extractedLinks: [], sections: {}, uris: [] }
           }
         })
       )
@@ -211,7 +215,7 @@ export default function Home() {
     setSelectedATLs(prev => { const n = new Set(prev); n.has(val) ? n.delete(val) : n.add(val); return n })
 
   const uploadFile = async (file: File) => {
-    const entry: KBFile = { name: file.name, size: file.size, status: 'uploading', content: null, base64: null, mimeType: null, isPdf: false, extractedLinks: [] }
+    const entry: KBFile = { name: file.name, size: file.size, status: 'uploading', content: null, base64: null, mimeType: null, isPdf: false, extractedLinks: [], sections: {}, uris: [] }
     setKB(prev => [...prev.filter(f => f.name !== file.name), entry])
     try {
       const form = new FormData()
@@ -222,7 +226,7 @@ export default function Home() {
       if (!cr.ok) throw new Error('읽기 실패')
       const data = await cr.json()
       setKB(prev => prev.map(f => f.name === file.name
-        ? { ...f, status: 'ready', content: data.content ?? null, base64: data.base64 ?? null, mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false, extractedLinks: data.content ? extractUrls(data.content) : [] }
+        ? { ...f, status: 'ready', content: data.content ?? null, base64: data.base64 ?? null, mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false, extractedLinks: data.content ? extractUrls(data.content) : [], sections: data.sections ?? {}, uris: data.uris ?? [] }
         : f))
     } catch {
       setKB(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', extractedLinks: [] } : f))
@@ -253,17 +257,35 @@ export default function Home() {
 
     let fileDocs = ''
     readyFiles.forEach(f => {
-      if (f.content) {
-        fileDocs += `\n=== 참고 문서: ${f.name} ===\n${f.content.slice(0, 8000)}\n=== 끝 ===\n`
+      if (f.isPdf && Object.keys(f.sections).length > 0) {
+        // 선택한 ATL 범주에 해당하는 섹션만 전송
+        const targetCats = selectedATLs.size > 0 ? [...selectedATLs] : Object.keys(f.sections)
+        const sectionTexts = targetCats
+          .map(cat => f.sections[cat] ? `[${cat}]\n${f.sections[cat]}` : '')
+          .filter(Boolean)
+          .join('\n\n')
+        if (sectionTexts) {
+          fileDocs += `\n=== 참고 문서: ${f.name} (선택 범주 섹션) ===\n${sectionTexts}\n=== 끝 ===\n`
+        }
+      } else if (f.content) {
+        fileDocs += `\n=== 참고 문서: ${f.name} ===\n${f.content.slice(0, 5000)}\n=== 끝 ===\n`
       }
     })
 
-    // PDF에서 추출한 활동명 목록 — AI가 이 label 중에서만 activityKeys를 선택
-    // 링크 URL은 클라이언트가 label 매칭으로 직접 붙임 (AI에게 URL 생성 권한 없음)
+    // uris(완전한 URL) 기반으로 activityList 구성
+    // label은 텍스트에서 URL 앞 텍스트로 추정, URL은 완전한 값 사용
+    const allUris = readyFiles.flatMap(f => f.uris)
     const allLinks = readyFiles.flatMap(f => f.extractedLinks)
-    const activityList = allLinks.length > 0
+    // uris가 있으면 uris 우선, 없으면 extractedLinks fallback
+    const linkSource = allUris.length > 0
+      ? allUris.map(url => {
+          const matched = allLinks.find(lk => url.includes(lk.url.slice(0, 40)) || lk.url.includes(url.slice(0, 40)))
+          return { label: matched?.label || url, url }
+        })
+      : allLinks
+    const activityList = linkSource.length > 0
       ? `\n[참고 문서의 활동 목록 — activityKeys는 반드시 이 label 값 중에서만 선택]\n` +
-        allLinks.map((lk, i) => `${i + 1}. "${lk.label}"`).join('\n') + '\n'
+        linkSource.map((lk, i) => `${i + 1}. "${lk.label}"`).join('\n') + '\n'
       : ''
 
     const gemsBlock = gemsText.trim()
@@ -331,6 +353,10 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
     }
     if (knowledgeBase.some(f => f.status === 'uploading')) {
       alert('파일 업로드 중입니다. 잠시 후 다시 시도해 주세요.'); return
+    }
+    const hasPdf = knowledgeBase.some(f => f.status === 'ready' && f.isPdf)
+    if (hasPdf && selectedATLs.size === 0) {
+      alert('ATL 기능 범주를 1개 이상 선택해 주세요.\n범주를 선택하지 않으면 PDF 전체를 전송해 토큰 한도를 초과할 수 있습니다.'); return
     }
     setLoading(true); setResult(null); setError('')
     try {
@@ -605,12 +631,16 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
               </div>
               {result.recommendations?.map((r, idx) => {
                 const s = CAT[r.category] || { iconBg: '#5F5E5A', iconFill: '#F1EFE8', icon: 'ti-star' }
-                // AI가 고른 activityKeys label로 PDF 링크 직접 매핑
+                // uris(완전한 URL) 우선, fallback은 extractedLinks
+                const allUrisCard = knowledgeBase.filter(f => f.status === 'ready').flatMap(f => f.uris)
+                const allLinksCard = knowledgeBase.filter(f => f.status === 'ready').flatMap(f => f.extractedLinks)
                 const labelToLink = new Map(
-                  knowledgeBase
-                    .filter(f => f.status === 'ready')
-                    .flatMap(f => f.extractedLinks)
-                    .map(lk => [lk.label, lk.url])
+                  allLinksCard.map(lk => {
+                    const fullUri = allUrisCard.find(u =>
+                      u.includes(lk.url.slice(0, 40)) || lk.url.includes(u.slice(0, 40))
+                    )
+                    return [lk.label, fullUri || lk.url]
+                  })
                 )
                 const safeLinks = (r.activityKeys || [])
                   .map(key => ({ label: key, url: labelToLink.get(key) }))
