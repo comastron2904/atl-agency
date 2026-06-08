@@ -21,7 +21,29 @@ const ATL_SECTIONS: Record<string, { start: RegExp; end: RegExp | null }> = {
   '사고기능':     { start: /#5\.\s*사고/,           end: null },
 }
 
-// 원시 PDF 바이너리에서 완전한 URI 추출
+// Activity name 패턴으로 정확한 label→URI 매핑
+function extractActivityLinks(text: string, uris: string[]): { label: string; url: string }[] {
+  const pattern = /Activity name\s*[：:]\s*([^\n(（]+?)(?:\s*[\(（]|\s*\n)/gm
+  const results: { label: string; url: string }[] = []
+  const seen = new Set<string>()
+
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(text)) !== null) {
+    const label = m[1].trim().replace(/[\(（]$/, '').trim()
+    const pos = m.index + m[0].length
+    const nearby = text.slice(pos, pos + 300)
+
+    for (const uri of uris) {
+      const frag = uri.slice(0, 35)
+      if (nearby.includes(frag) && !seen.has(uri)) {
+        seen.add(uri)
+        results.push({ label, url: uri })
+        break
+      }
+    }
+  }
+  return results
+}
 function extractUrisFromBuffer(buffer: Buffer): string[] {
   const raw = buffer.toString('latin1')
   const matches = [...raw.matchAll(/\/URI\s*\(([^)]+)\)/g)]
@@ -75,14 +97,18 @@ export async function GET(req: NextRequest) {
       // 원시 바이너리에서 완전한 URL 추출
       const uris = extractUrisFromBuffer(buffer)
 
+      // Activity name 패턴으로 정확한 label→URI 매핑
+      const extractedLinks = extractActivityLinks(fullText, uris)
+
       return NextResponse.json({
         name,
         isPdf: true,
         base64,
         mimeType: 'application/pdf',
         content: fullText,
-        sections,   // { 의사소통기능: "...", 대인관계기능: "...", ... }
-        uris,       // 완전한 URL 배열 (어노테이션 기반)
+        sections,
+        uris,
+        extractedLinks, // 정확한 label→URI 매핑 (서버에서 생성)
       })
     } else {
       const text = await data.text()
