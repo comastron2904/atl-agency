@@ -354,10 +354,6 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
     if (knowledgeBase.some(f => f.status === 'uploading')) {
       alert('파일 업로드 중입니다. 잠시 후 다시 시도해 주세요.'); return
     }
-    const hasPdf = knowledgeBase.some(f => f.status === 'ready' && f.isPdf)
-    if (hasPdf && selectedATLs.size === 0) {
-      alert('ATL 기능 범주를 1개 이상 선택해 주세요.\n범주를 선택하지 않으면 PDF 전체를 전송해 토큰 한도를 초과할 수 있습니다.'); return
-    }
     setLoading(true); setResult(null); setError('')
     try {
       // xAI API 직접 호출 (OpenAI 호환)
