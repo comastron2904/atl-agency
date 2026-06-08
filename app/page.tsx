@@ -144,7 +144,7 @@ function fileIconTi(name: string) {
   return 'ti-file'
 }
 
-const STORAGE_KEY = 'atl_groq_key'
+const STORAGE_KEY = 'atl_xai_key'
 
 export default function Home() {
   const [modalOpen, setModalOpen]         = useState(false)
@@ -360,15 +360,15 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
     }
     setLoading(true); setResult(null); setError('')
     try {
-      // Groq API 직접 호출
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      // xAI API 직접 호출 (OpenAI 호환)
+      const res = await fetch('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'grok-3-fast',
           messages: [
             {
               role: 'system',
@@ -436,15 +436,15 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
           <div className="modal-box">
             <div className="modal-title"><i className="ti ti-settings"></i> 설정</div>
 
-            <div className="modal-label">Groq API 키</div>
+            <div className="modal-label">xAI API 키</div>
             <input
               type="password" className="modal-input" placeholder="gsk_..."
               value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)}
               autoComplete="off"
             />
             <div className="modal-hint">
-              <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer"
-                style={{ color: 'var(--green-dark)' }}>console.groq.com</a>에서 무료로 발급받으세요.<br />
+              <a href="https://console.x.ai/" target="_blank" rel="noreferrer"
+                style={{ color: 'var(--green-dark)' }}>console.x.ai</a>에서 무료로 발급받으세요.<br />
               키는 브라우저에만 저장되며 외부로 전송되지 않습니다.
             </div>
             <div className="modal-status">
@@ -581,7 +581,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
             <div className="empty-state">
               <i className="ti ti-bulb"></i>
               <h3>ATL 추천을 시작하세요</h3>
-              <p>⚙️ 설정에서 Groq API 키와 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
+              <p>⚙️ 설정에서 xAI API 키와 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
             </div>
           )}
           {loading && (
