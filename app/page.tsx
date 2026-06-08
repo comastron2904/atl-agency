@@ -379,7 +379,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
             { role: 'user', content: buildPrompt() },
           ],
           temperature: 0.35,
-          max_tokens: 4000,
+          max_tokens: 8000,
         }),
       })
 
