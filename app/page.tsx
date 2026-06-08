@@ -366,7 +366,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
           'X-Title': 'ATL Agency',
         },
         body: JSON.stringify({
-          model: 'openrouter/auto',
+          model: 'openrouter/free',
           messages: [
             {
               role: 'system',
