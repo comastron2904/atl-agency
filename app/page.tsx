@@ -366,7 +366,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
           'X-Title': 'ATL Agency',
         },
         body: JSON.stringify({
-          model: 'openrouter/free',
+          model: 'google/gemma-3-27b-it:free',
           messages: [
             {
               role: 'system',
@@ -389,7 +389,13 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
       if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`)
 
       const raw: string = data?.choices?.[0]?.message?.content || ''
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+      if (!raw) throw new Error(`AI 응답이 비어있습니다. 모델: ${data?.model || 'unknown'}`)
+
+      // JSON 블록 추출 — 코드블록, 앞뒤 텍스트 제거
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error(`JSON을 찾을 수 없습니다. 응답: ${raw.slice(0, 200)}`)
+
+      const parsed = JSON.parse(jsonMatch[0])
 
       // Supabase에 기록 저장
       await fetch('/api/recommend', {
