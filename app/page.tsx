@@ -193,7 +193,7 @@ export default function Home() {
               name: item.name, size: item.metadata?.size ?? 0, status: 'ready' as const,
               content, base64: data.base64 ?? null,
               mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false,
-              extractedLinks: content ? extractUrls(content) : [],
+              extractedLinks: data.extractedLinks ?? (content ? extractUrls(content) : []),
               sections: data.sections ?? {},
               uris: data.uris ?? [],
             }
@@ -226,7 +226,7 @@ export default function Home() {
       if (!cr.ok) throw new Error('읽기 실패')
       const data = await cr.json()
       setKB(prev => prev.map(f => f.name === file.name
-        ? { ...f, status: 'ready', content: data.content ?? null, base64: data.base64 ?? null, mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false, extractedLinks: data.content ? extractUrls(data.content) : [], sections: data.sections ?? {}, uris: data.uris ?? [] }
+        ? { ...f, status: 'ready', content: data.content ?? null, base64: data.base64 ?? null, mimeType: data.mimeType ?? null, isPdf: data.isPdf ?? false, extractedLinks: data.extractedLinks ?? (data.content ? extractUrls(data.content) : []), sections: data.sections ?? {}, uris: data.uris ?? [] }
         : f))
     } catch {
       setKB(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', extractedLinks: [] } : f))
