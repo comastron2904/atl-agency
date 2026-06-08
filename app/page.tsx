@@ -366,7 +366,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
           'X-Title': 'ATL Agency',
         },
         body: JSON.stringify({
-          model: 'deepseek/deepseek-chat:free',
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
           messages: [
             {
               role: 'system',
