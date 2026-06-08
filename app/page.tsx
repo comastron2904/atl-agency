@@ -364,7 +364,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b',
+          model: 'gpt-oss-120b',
           messages: [
             {
               role: 'system',
