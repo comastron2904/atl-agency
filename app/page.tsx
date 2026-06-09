@@ -356,35 +356,43 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
     }
     setLoading(true); setResult(null); setError('')
     try {
-      // Gemini API 직접 호출 (OpenAI 호환 엔드포인트)
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gemini-2.5-flash',
-          messages: [
-            {
-              role: 'system',
-              content: [
-                '당신은 IB 교육 전문가입니다.',
-                '반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.',
-                gemsText.trim()
-                  ? '사용자 메시지 최상단의 [GEMS 답변 지침]은 최우선 지시사항입니다. JSON의 모든 텍스트 필드(summary, description, reason, activities)를 해당 지침에 명시된 언어 수준·분량·형식에 맞게 작성하세요. 지침과 충돌할 경우 기본 형식보다 GEMS 지침을 따르세요.'
-                  : '',
-              ].filter(Boolean).join(' '),
-            },
-            { role: 'user', content: buildPrompt() },
-          ],
-          temperature: 0.35,
-          max_tokens: 8000,
-        }),
+      const prompt = buildPrompt()
+      const body = JSON.stringify({
+        model: 'gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '당신은 IB 교육 전문가입니다.',
+              '반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.',
+              gemsText.trim()
+                ? '사용자 메시지 최상단의 [GEMS 답변 지침]은 최우선 지시사항입니다. JSON의 모든 텍스트 필드(summary, description, reason, activities)를 해당 지침에 명시된 언어 수준·분량·형식에 맞게 작성하세요. 지침과 충돌할 경우 기본 형식보다 GEMS 지침을 따르세요.'
+                : '',
+            ].filter(Boolean).join(' '),
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.35,
+        max_tokens: 8000,
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`)
+      // 최대 3회 자동 재시도 (503 대응)
+      let res: Response | null = null
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body,
+        })
+        if (res.status !== 503) break
+        if (attempt < 3) await new Promise(r => setTimeout(r, 2000 * attempt))
+      }
+
+      const data = await res!.json()
+      if (!res!.ok) throw new Error(data?.error?.message || `HTTP ${res!.status}`)
 
       const raw: string = data?.choices?.[0]?.message?.content || ''
       if (!raw) throw new Error(`AI 응답이 비어있습니다. 모델: ${data?.model || 'unknown'}`)
