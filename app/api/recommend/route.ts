@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       max_tokens: 8000,
     })
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 10; attempt++) {
       res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
         headers: {
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         body: geminiBody,
       })
       if (res.status !== 503) break
-      if (attempt < 3) await new Promise(r => setTimeout(r, 2000 * attempt))
+      if (attempt < 10) await new Promise(r => setTimeout(r, 500))
     }
 
     const data = await res!.json()
