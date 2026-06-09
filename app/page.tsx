@@ -144,12 +144,9 @@ function fileIconTi(name: string) {
   return 'ti-file'
 }
 
-const STORAGE_KEY = 'atl_gemini_key'
 
 export default function Home() {
   const [modalOpen, setModalOpen]         = useState(false)
-  const [apiKey, setApiKey]               = useState('')
-  const [apiKeyInput, setApiKeyInput]     = useState('')
   const [gemsText, setGemsText]           = useState('')
   const [gemsPreset, setGemsPreset]       = useState('')
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
@@ -164,15 +161,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropRef      = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || ''
-    setApiKey(saved)
-    setApiKeyInput(saved)
-  }, [])
-
-  const saveApiKey = () => {
-    localStorage.setItem(STORAGE_KEY, apiKeyInput)
-    setApiKey(apiKeyInput)
+  const saveSettings = () => {
     setModalOpen(false)
   }
 
@@ -347,7 +336,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
   }
 
   const handleSubmit = async () => {
-    if (!apiKey) { setModalOpen(true); return }
+    
     if (!lesson && selectedTypes.size === 0 && knowledgeBase.length === 0) {
       alert('수업 설명이나 수업 유형을 입력해 주세요.'); return
     }
@@ -356,67 +345,24 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
     }
     setLoading(true); setResult(null); setError('')
     try {
-      const prompt = buildPrompt()
-      const body = JSON.stringify({
-        model: 'gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: [
-              '당신은 IB 교육 전문가입니다.',
-              '반드시 순수 JSON만 응답하세요. 마크다운 코드블록 없이 JSON 객체만 반환하세요.',
-              gemsText.trim()
-                ? '사용자 메시지 최상단의 [GEMS 답변 지침]은 최우선 지시사항입니다. JSON의 모든 텍스트 필드(summary, description, reason, activities)를 해당 지침에 명시된 언어 수준·분량·형식에 맞게 작성하세요. 지침과 충돌할 경우 기본 형식보다 GEMS 지침을 따르세요.'
-                : '',
-            ].filter(Boolean).join(' '),
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.35,
-        max_tokens: 8000,
-      })
-
-      // 최대 3회 자동 재시도 (503 대응)
-      let res: Response | null = null
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body,
-        })
-        if (res.status !== 503) break
-        if (attempt < 3) await new Promise(r => setTimeout(r, 2000 * attempt))
-      }
-
-      const data = await res!.json()
-      if (!res!.ok) throw new Error(data?.error?.message || `HTTP ${res!.status}`)
-
-      const raw: string = data?.choices?.[0]?.message?.content || ''
-      if (!raw) throw new Error(`AI 응답이 비어있습니다. 모델: ${data?.model || 'unknown'}`)
-
-      // JSON 블록 추출 — 코드블록, 앞뒤 텍스트 제거
-      const jsonMatch = raw.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error(`JSON을 찾을 수 없습니다. 응답: ${raw.slice(0, 200)}`)
-
-      const parsed = JSON.parse(jsonMatch[0])
-
-      // Supabase에 기록 저장
-      await fetch('/api/recommend', {
+      // 서버에서 Gemini 호출 + DB 저장
+      const res = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          prompt: buildPrompt(),
           lesson, grade,
           selectedTypes: [...selectedTypes],
           selectedATLs: [...selectedATLs],
           gemsInstruction: gemsText.trim() || null,
-          parsed,
+          gemsText: gemsText.trim(),
         }),
       })
 
-      setResult(parsed)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+
+      setResult(data.parsed)
     } catch (e: any) {
       setError(e.message || '알 수 없는 오류가 발생했습니다.')
     } finally {
@@ -426,7 +372,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
 
   const kbCount = knowledgeBase.filter(f => f.status === 'ready').length
   const kbTotal = knowledgeBase.reduce((s, f) => s + f.size, 0)
-  const apiOk = apiKey.length > 10
+  const apiOk = true
 
   return (
     <>
@@ -445,26 +391,6 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
         <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}>
           <div className="modal-box">
             <div className="modal-title"><i className="ti ti-settings"></i> 설정</div>
-
-            <div className="modal-label">Gemini API 키</div>
-            <input
-              type="password" className="modal-input" placeholder="gsk_..."
-              value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)}
-              autoComplete="off"
-            />
-            <div className="modal-hint">
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
-                style={{ color: 'var(--green-dark)' }}>aistudio.google.com</a>에서 무료로 발급받으세요.<br />
-              키는 브라우저에만 저장되며 외부로 전송되지 않습니다.
-            </div>
-            <div className="modal-status">
-              <span className={`modal-dot${apiKeyInput.length > 10 ? ' ok' : ''}`}></span>
-              <span className={`modal-dot-label${apiKeyInput.length > 10 ? ' ok' : ''}`}>
-                {apiKeyInput.length > 10 ? 'API 키가 입력되었습니다' : 'API 키가 입력되지 않았습니다'}
-              </span>
-            </div>
-
-            <div style={{ borderTop: '0.5px solid var(--border)', margin: '1rem 0' }}></div>
 
             <div className="modal-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span>답변 방향성</span>
@@ -491,7 +417,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
             <div className="modal-hint" style={{ marginTop: 6 }}>각 필드(description · activities · reason · summary)의 언어 수준, 분량, 형식을 직접 지정하세요. 구체적일수록 AI가 정확히 따릅니다.</div>
 
             <div className="modal-close-row">
-              <button className="btn-pill" style={{ height: 34, fontSize: '12.5px' }} onClick={saveApiKey}>
+              <button className="btn-pill" style={{ height: 34, fontSize: '12.5px' }} onClick={saveSettings}>
                 <i className="ti ti-check"></i> 저장
               </button>
             </div>
@@ -591,7 +517,7 @@ recommendations 최소 4개, 최대 7개.${activityList ? '\nactivityKeys는 위
             <div className="empty-state">
               <i className="ti ti-bulb"></i>
               <h3>ATL 추천을 시작하세요</h3>
-              <p>⚙️ 설정에서 Gemini API 키와 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
+              <p>⚙️ 설정에서 답변 방향성을 설정하고,<br />수업 내용을 작성하세요</p>
             </div>
           )}
           {loading && (
